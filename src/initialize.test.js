@@ -279,6 +279,13 @@ describe('initialize', () => {
     expect(overrideHandlers.initError).toHaveBeenCalledWith(new Error('uhoh!'));
   });
 
+  it('should initialize the app with javascript file configuration', async () => {
+    const messages = { i_am: 'a message' };
+    await initialize({ messages });
+
+    expect(config.JS_FILE_VAR).toEqual('JS_FILE_VAR_VALUE');
+  });
+
   it('should initialize the app with runtime configuration', async () => {
     config.MFE_CONFIG_API_URL = 'http://localhost:18000/api/mfe/v1/config';
     config.APP_ID = 'auth';

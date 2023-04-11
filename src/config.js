@@ -2,23 +2,89 @@
  * #### Import members from **@edx/frontend-platform**
  *
  * The configuration module provides utilities for working with an application's configuration
- * document (ConfigDocument).  This module uses `process.env` to import configuration variables
- * from the command-line build process.  It can be dynamically extended at run-time using a
- * `config` initialization handler.  Please see the Initialization documentation for more
- * information on handlers and initialization phases.
+ * document (ConfigDocument).  Configuration environment variables can be supplied to the
+ * application in four different ways:
+ *
+ * ##### Build-time Environment Variables
+ *
+ * A set list of required config variables can be supplied as
+ * command-line environment variables during the build process.
+ *
+ * As a simple example, these are supplied on the command-line before invoking `npm run build`:
  *
  * ```
- * import { getConfig } from '@edx/frontend-platform';
+ * LMS_BASE_URL=http://localhost:18000 npm run build
+ * ```
  *
- * const {
- *   BASE_URL,
- *   LMS_BASE_URL,
- *   LOGIN_URL,
- *   LOGIN_URL,
- *   REFRESH_ACCESS_TOKEN_ENDPOINT,
- *   ACCESS_TOKEN_COOKIE_NAME,
- *   CSRF_TOKEN_API_PATH,
- * } = getConfig();
+ * Note that additional variables _cannot_ be supplied via this method without using the `config`
+ * initialization handler.  The app won't pick them up and they'll appear `undefined`.
+ *
+ * ##### JavaScript File Configuration
+ *
+ * Configuration variables can be supplied in an optional file
+ * named env.config.js.  This file must export either an Object containing configuration variables
+ * or a function.  The function must return an Object containing configuration variables or,
+ * alternately, a promise which resolves to an Object.
+ *
+ * Exporting a config object:
+ * ```
+ * const config = {
+ *   LMS_BASE_URL: 'http://localhost:18000'
+ * };
+ *
+ * export default config;
+ * ```
+ *
+ * Exporting a function that returns an object:
+ * ```
+ * function getConfig() {
+ *   return {
+ *     LMS_BASE_URL: 'http://localhost:18000'
+ *   };
+ * }
+ * ```
+ *
+ * Exporting a function that returns a promise that resolves to an object:
+ * ```
+ * function getAsyncConfig() {
+ *   return new Promise((resolve, reject) => {
+ *     resolve({
+ *       LMS_BASE_URL: 'http://localhost:18000'
+ *     });
+ *   });
+ * }
+ *
+ * export default getAsyncConfig;
+ * ```
+ *
+ * ##### Runtime Configuration
+ *
+ * Configuration variables can also be supplied using the "runtime
+ * configuration" method, taking advantage of the Micro-frontend Config API in edx-platform.
+ * More information on this API can be found in the ADR which introduced it:
+ *
+ * https://github.com/openedx/edx-platform/blob/master/lms/djangoapps/mfe_config_api/docs/decisions/0001-mfe-config-api.rst
+ *
+ * The runtime configuration method can be enabled by supplying a MFE_CONFIG_API_URL via one of the other
+ * two configuration methods above.
+ *
+ * ##### Initialization Config Handler
+ *
+ * The configuration document can be extended by
+ * applications at run-time using a `config` initialization handler.  Please see the Initialization
+ * documentation for more information on handlers and initialization phases.
+ *
+ * ```
+ * initialize({
+ *   handlers: {
+ *     config: () => {
+ *       mergeConfig({
+ *         CUSTOM_VARIABLE: 'custom value',
+ *         LMS_BASE_URL: 'http://localhost:18001' // You can override variables, but this is uncommon.
+  *       }, 'App config override handler');
+ *     },
+ *   },
+ * });
  * ```
  *
  * @module Config
@@ -76,8 +142,17 @@ let config = {
 
 /**
  * Getter for the application configuration document.  This is synchronous and merely returns a
- * reference to an existing object, and is thus safe to call as often as desired.  The document
- * should have the following keys at a minimum:
+ * reference to an existing object, and is thus safe to call as often as desired.
+ *
+ * Example:
+ *
+ * ```
+ * import { getConfig } from '@edx/frontend-platform';
+ *
+ * const {
+ *   LMS_BASE_URL,
+ * } = getConfig();
+ * ```
  *
  * @returns {ConfigDocument}
   */
@@ -90,6 +165,16 @@ export function getConfig() {
  *
  * The supplied config document will be tested with `ensureDefinedConfig` to ensure it does not
  * have any `undefined` keys.
+ *
+ * Example:
+ *
+ * ```
+ * import { setConfig } from '@edx/frontend-platform';
+ *
+ * setConfig({
+ *   LMS_BASE_URL, // This is overriding the ENTIRE document - this is not merged in!
+ * });
+ * ```
  *
  * @param {ConfigDocument} newConfig
  */
@@ -157,7 +242,10 @@ export function ensureConfig(keys, requester = 'unspecified application code') {
 /**
  * An object describing the current application configuration.
  *
- * The implementation loads this document via `process.env` variables.
+ * In its most basic form, the initialization process loads this document via `process.env`
+ * variables.  There are other ways to add configuration variables to the ConfigDocument as
+ * documented above (JavaScript File Configuration, Runtime Configuration, and the Initialization
+ * Config Handler)
  *
  * ```
  * {

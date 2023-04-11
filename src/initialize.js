@@ -46,6 +46,15 @@
  */
 
 import { createBrowserHistory, createMemoryHistory } from 'history';
+/*
+This 'env.config' package is a special 'magic' alias in our webpack configuration in frontend-build.
+It points at an `env.config.js` file in the root of an MFE's repository if it exists and falls back
+to an empty object `{}` if the file doesn't exist.  This acts like an 'optional' import, in a sense.
+Note that the env.config.js file in frontend-platform's root directory is NOT used by the actual
+initialization code, it's just there for the test suite and example application.
+*/
+import envConfig from 'env.config'; // eslint-disable-line import/no-unresolved
+
 import {
   publish,
 } from './pubSub';
@@ -130,13 +139,32 @@ export async function auth(requireUser, hydrateUser) {
     hydrateAuthenticatedUser();
   }
 }
+
+/**
+ * Set or overrides configuration via an env.config.js file in the consuming application.
+ * This env.config.js is loaded at runtime and must export one of two things:
+ *
+ * - An object which will be merged into the application config via `mergeConfig`.
+ * - A function which returns an object which will be merged into the application config via
+ * `mergeConfig`.  This function can return a promise.
+ */
+async function jsFileConfig() {
+  let config = {};
+  if (typeof envConfig === 'function') {
+    config = await envConfig();
+  } else {
+    config = envConfig;
+  }
+
+  mergeConfig(config);
+}
+
 /*
  * Set or overrides configuration through an API.
  * This method allows runtime configuration.
  * Set a basic configuration when an error happen and allow initError and display the ErrorPage.
  */
-
-export async function runtimeConfig() {
+async function runtimeConfig() {
   try {
     const { MFE_CONFIG_API_URL, APP_ID } = getConfig();
 
@@ -253,18 +281,28 @@ export async function initialize({
 
     // Configuration
     await handlers.config();
+    await jsFileConfig();
     await runtimeConfig();
     publish(APP_CONFIG_INITIALIZED);
 
+    // This allows us to replace the implementations of the logging, analytics, and auth services
+    // based on keys in the ConfigDocument.  The JavaScript File Configuration method is the only
+    // one capable of supplying an alternate implementation since it can import other modules.
+    // If a service wasn't supplied we fall back to the default parameters on the initialize
+    // function signature.
+    const loggingServiceImpl = getConfig().loggingService || loggingService;
+    const analyticsServiceImpl = getConfig().analyticsService || analyticsService;
+    const authServiceImpl = getConfig().authService || authService;
+
     // Logging
-    configureLogging(loggingService, {
+    configureLogging(loggingServiceImpl, {
       config: getConfig(),
     });
     await handlers.logging();
     publish(APP_LOGGING_INITIALIZED);
 
     // Authentication
-    configureAuth(authService, {
+    configureAuth(authServiceImpl, {
       loggingService: getLoggingService(),
       config: getConfig(),
       middleware: authMiddleware,
@@ -274,7 +312,7 @@ export async function initialize({
     publish(APP_AUTH_INITIALIZED);
 
     // Analytics
-    configureAnalytics(analyticsService, {
+    configureAnalytics(analyticsServiceImpl, {
       config: getConfig(),
       loggingService: getLoggingService(),
       httpClient: getAuthenticatedHttpClient(),
