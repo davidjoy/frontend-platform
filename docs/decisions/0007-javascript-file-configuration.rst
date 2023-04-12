@@ -28,7 +28,7 @@ token that helps the build replace it with a string literal.
 This approach has several important limitations:
 
 - There's no way to add variables without hard-coding process.env.XXXX somewhere in the file,
-  complicating our ability to add additional application-specific configuration without explici tly
+  complicating our ability to add additional application-specific configuration without explicitly
   merging it into the configuration document after it's been created in frontend-platform.
 - The method can *only* handle strings.
 
