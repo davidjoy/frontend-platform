@@ -17,3 +17,4 @@ export {
 } from './interface';
 export { default as AxiosJwtAuthService } from './AxiosJwtAuthService';
 export { default as MockAuthService } from './MockAuthService';
+export { default as DevelopmentAuthService } from './DevelopmentAuthService';

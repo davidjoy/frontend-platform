@@ -1,6 +1,6 @@
 import axios from 'axios';
 import PropTypes from 'prop-types';
-import { ensureDefinedConfig } from '../utils';
+import AbstractAuthService, { abstractOptionsPropTypes } from './AbstractAuthService';
 
 const userPropTypes = PropTypes.shape({
   userId: PropTypes.string.isRequired,
@@ -10,19 +10,7 @@ const userPropTypes = PropTypes.shape({
 });
 
 const optionsPropTypes = {
-  config: PropTypes.shape({
-    BASE_URL: PropTypes.string.isRequired,
-    LMS_BASE_URL: PropTypes.string.isRequired,
-    LOGIN_URL: PropTypes.string.isRequired,
-    LOGOUT_URL: PropTypes.string.isRequired,
-    REFRESH_ACCESS_TOKEN_ENDPOINT: PropTypes.string.isRequired,
-    ACCESS_TOKEN_COOKIE_NAME: PropTypes.string.isRequired,
-    CSRF_TOKEN_API_PATH: PropTypes.string.isRequired,
-  }).isRequired,
-  loggingService: PropTypes.shape({
-    logError: PropTypes.func.isRequired,
-    logInfo: PropTypes.func.isRequired,
-  }).isRequired,
+  ...abstractOptionsPropTypes,
   // The absence of authenticatedUser means the user is anonymous.
   authenticatedUser: userPropTypes,
   // Must be at least a valid user, but may have other fields.
@@ -74,7 +62,7 @@ const optionsPropTypes = {
  * @implements {AuthService}
  * @memberof module:Auth
  */
-class MockAuthService {
+class MockAuthService extends AbstractAuthService {
   /**
    * @param {Object} options
    * @param {Object} options.config
@@ -90,14 +78,9 @@ class MockAuthService {
    * @param {Object} options.loggingService requires logError and logInfo methods
    */
   constructor(options) {
-    this.authenticatedHttpClient = null;
-    this.httpClient = null;
+    super(options);
 
-    ensureDefinedConfig(options, 'AuthService');
     PropTypes.checkPropTypes(optionsPropTypes, options, 'options', 'AuthService');
-
-    this.config = options.config;
-    this.loggingService = options.loggingService;
 
     // Mock user
     this.authenticatedUser = this.config.authenticatedUser ? this.config.authenticatedUser : null;
@@ -109,28 +92,7 @@ class MockAuthService {
     this.httpClient = axios.create();
   }
 
-  /**
-   * A Jest mock function (jest.fn())
-   *
-   * Applies middleware to the axios instances in this service.
-   *
-   * @param {Array} middleware Middleware to apply.
-   */
-  applyMiddleware(middleware = []) {
-    const clients = [
-      this.authenticatedHttpClient, this.httpClient,
-      this.cachedAuthenticatedHttpClient, this.cachedHttpClient,
-    ];
-    try {
-      (middleware).forEach((middlewareFn) => {
-        clients.forEach((client) => client && middlewareFn(client));
-      });
-    } catch (error) {
-      throw new Error(`Failed to apply middleware: ${error.message}.`);
-    }
-  }
-
-  /**
+   /**
    * A Jest mock function (jest.fn())
    *
    * Gets the authenticated HTTP client instance, which is an axios client wrapped in
@@ -138,7 +100,7 @@ class MockAuthService {
    *
    * @returns {HttpClient} An HttpClient wrapped in MockAdapter.
    */
-  getAuthenticatedHttpClient = jest.fn(() => this.authenticatedHttpClient);
+  getAuthenticatedHttpClient = jest.fn(super.getAuthenticatedHttpClient);
 
   /**
    * A Jest mock function (jest.fn())
@@ -148,7 +110,7 @@ class MockAuthService {
    *
    * @returns {HttpClient} An HttpClient wrapped in MockAdapter.
    */
-  getHttpClient = jest.fn(() => this.httpClient);
+  getHttpClient = jest.fn(super.getHttpClient);
 
   /**
    * A Jest mock function (jest.fn())
@@ -162,9 +124,7 @@ class MockAuthService {
    *
    * @param {string} redirectUrl The URL the user should be redirected to after logging in.
    */
-  getLoginRedirectUrl = jest.fn(
-    (redirectUrl = this.config.BASE_URL) => `${this.config.LOGIN_URL}?next=${encodeURIComponent(redirectUrl)}`,
-  );
+  getLoginRedirectUrl = jest.fn(super.getLoginRedirectUrl);
 
   /**
    * A Jest mock function (jest.fn())
@@ -173,10 +133,7 @@ class MockAuthService {
    *
    * @param {string} redirectUrl The URL the user should be redirected to after logging in.
    */
-  redirectToLogin = jest.fn((redirectUrl = this.config.BASE_URL) => {
-    // Do nothing after getting the URL - this preserves the calls properly, but doesn't redirect.
-    this.getLoginRedirectUrl(redirectUrl);
-  });
+  redirectToLogin = jest.fn(super.redirectToLogin);
 
   /**
    * A Jest mock function (jest.fn())
@@ -190,7 +147,7 @@ class MockAuthService {
    *
    * @param {string} redirectUrl The URL the user should be redirected to after logging out.
    */
-  getLogoutRedirectUrl = jest.fn((redirectUrl = this.config.BASE_URL) => `${this.config.LOGOUT_URL}?redirect_url=${encodeURIComponent(redirectUrl)}`);
+  getLogoutRedirectUrl = jest.fn(super.getLogoutRedirectUrl);
 
   /**
    * A Jest mock function (jest.fn())
@@ -199,10 +156,7 @@ class MockAuthService {
    *
    * @param {string} redirectUrl The URL the user should be redirected to after logging out.
    */
-  redirectToLogout = jest.fn((redirectUrl = this.config.BASE_URL) => {
-    // Do nothing after getting the URL - this preserves the calls properly, but doesn't redirect.
-    this.getLogoutRedirectUrl(redirectUrl);
-  });
+  redirectToLogout = jest.fn(super.redirectToLogout);
 
   /**
    * A Jest mock function (jest.fn())
@@ -212,7 +166,7 @@ class MockAuthService {
    *
    * @returns {UserData|null}
    */
-  getAuthenticatedUser = jest.fn(() => this.authenticatedUser);
+  getAuthenticatedUser = jest.fn(super.getAuthenticatedUser);
 
   /**
    * A Jest mock function (jest.fn())
@@ -221,9 +175,7 @@ class MockAuthService {
    *
    * @param {UserData} authUser
    */
-  setAuthenticatedUser = jest.fn((authUser) => {
-    this.authenticatedUser = authUser;
-  });
+  setAuthenticatedUser = jest.fn(super.setAuthenticatedUser);
 
   /**
    * A Jest mock function (jest.fn())

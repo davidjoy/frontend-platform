@@ -56,7 +56,7 @@ This approach has several important limitations:
 - It makes it very difficult to supply array and object configuration variables, and unreasonable to
   supply class or function config since we'd have to ``eval()`` them.
 
-Related to all this, frontend-platform has long hand the ability to replace the implementations of
+Related to all this, frontend-platform has long had the ability to replace the implementations of
 its analytics, auth, and logging services, but no way to actually *configure* the app with a new
 implementation.  Because of the above limitations, there's no reasonable way to configure a
 JavaScript class via environment variables.

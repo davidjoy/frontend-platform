@@ -1,35 +1,20 @@
 import axios from 'axios';
 import PropTypes from 'prop-types';
 import { logFrontendAuthError } from './utils';
-import { camelCaseObject, ensureDefinedConfig } from '../utils';
+import { camelCaseObject } from '../utils';
 import createJwtTokenProviderInterceptor from './interceptors/createJwtTokenProviderInterceptor';
 import createCsrfTokenProviderInterceptor from './interceptors/createCsrfTokenProviderInterceptor';
 import createProcessAxiosRequestErrorInterceptor from './interceptors/createProcessAxiosRequestErrorInterceptor';
 import AxiosJwtTokenService from './AxiosJwtTokenService';
 import AxiosCsrfTokenService from './AxiosCsrfTokenService';
 import configureCache from './LocalForageCache';
-
-const optionsPropTypes = {
-  config: PropTypes.shape({
-    BASE_URL: PropTypes.string.isRequired,
-    LMS_BASE_URL: PropTypes.string.isRequired,
-    LOGIN_URL: PropTypes.string.isRequired,
-    LOGOUT_URL: PropTypes.string.isRequired,
-    REFRESH_ACCESS_TOKEN_ENDPOINT: PropTypes.string.isRequired,
-    ACCESS_TOKEN_COOKIE_NAME: PropTypes.string.isRequired,
-    CSRF_TOKEN_API_PATH: PropTypes.string.isRequired,
-  }).isRequired,
-  loggingService: PropTypes.shape({
-    logError: PropTypes.func.isRequired,
-    logInfo: PropTypes.func.isRequired,
-  }).isRequired,
-};
+import AbstractAuthService, { abstractOptionsPropTypes } from './AbstractAuthService';
 
 /**
  * @implements {AuthService}
  * @memberof module:Auth
  */
-class AxiosJwtAuthService {
+class AxiosJwtAuthService extends AbstractAuthService {
   /**
    * @param {Object} options
    * @param {Object} options.config
@@ -43,25 +28,23 @@ class AxiosJwtAuthService {
    * @param {Object} options.loggingService requires logError and logInfo methods
    */
   constructor(options) {
-    this.authenticatedHttpClient = null;
-    this.httpClient = null;
-    this.cachedAuthenticatedHttpClient = null;
-    this.cachedHttpClient = null;
-    this.authenticatedUser = null;
+    super(options);
 
-    ensureDefinedConfig(options, 'AuthService');
-    PropTypes.checkPropTypes(optionsPropTypes, options, 'options', 'AuthService');
+    PropTypes.checkPropTypes(abstractOptionsPropTypes, options, 'options', 'AuthService');
 
-    this.config = options.config;
-    this.loggingService = options.loggingService;
     this.jwtTokenService = new AxiosJwtTokenService(
       this.loggingService,
       this.config.ACCESS_TOKEN_COOKIE_NAME,
       this.config.REFRESH_ACCESS_TOKEN_ENDPOINT,
     );
     this.csrfTokenService = new AxiosCsrfTokenService(this.config.CSRF_TOKEN_API_PATH);
+
     this.authenticatedHttpClient = this.addAuthenticationToHttpClient(axios.create());
     this.httpClient = axios.create();
+
+    this.cachedAuthenticatedHttpClient = null;
+    this.cachedHttpClient = null;
+
     configureCache()
       .then((cachedAxiosClient) => {
         this.cachedAuthenticatedHttpClient = this.addAuthenticationToHttpClient(cachedAxiosClient);
@@ -79,23 +62,17 @@ class AxiosJwtAuthService {
   }
 
   /**
-   * Applies middleware to the axios instances in this service.
+   * Provides a list of middleware clients.
    *
-   * @param {Array} middleware Middleware to apply.
+   * @ignore
    */
-  applyMiddleware(middleware = []) {
-    const clients = [
-      this.authenticatedHttpClient, this.httpClient,
-      this.cachedAuthenticatedHttpClient, this.cachedHttpClient,
+  getMiddlewareClients() {
+    return [
+      this.authenticatedHttpClient,
+      this.httpClient,
+      this.cachedAuthenticatedHttpClient,
+      this.cachedHttpClient,
     ];
-    try {
-      (middleware).forEach((middlewareFn) => {
-        clients.forEach((client) => client && middlewareFn(client));
-      });
-    } catch (error) {
-      logFrontendAuthError(this.loggingService, error);
-      throw error;
-    }
   }
 
   /**
@@ -113,7 +90,7 @@ class AxiosJwtAuthService {
       return this.cachedAuthenticatedHttpClient;
     }
 
-    return this.authenticatedHttpClient;
+    return super.getAuthenticatedHttpClient();
   }
 
   /**
@@ -129,7 +106,7 @@ class AxiosJwtAuthService {
       return this.cachedHttpClient;
     }
 
-    return this.httpClient;
+    return super.getHttpClient();
   }
 
   /**
@@ -148,71 +125,6 @@ class AxiosJwtAuthService {
    */
   getCsrfTokenService() {
     return this.csrfTokenService;
-  }
-
-  /**
-   * Builds a URL to the login page with a post-login redirect URL attached as a query parameter.
-   *
-   * ```
-   * const url = getLoginRedirectUrl('http://localhost/mypage');
-   * console.log(url); // http://localhost/login?next=http%3A%2F%2Flocalhost%2Fmypage
-   * ```
-   *
-   * @param {string} redirectUrl The URL the user should be redirected to after logging in.
-   */
-  getLoginRedirectUrl(redirectUrl = this.config.BASE_URL) {
-    return `${this.config.LOGIN_URL}?next=${encodeURIComponent(redirectUrl)}`;
-  }
-
-  /**
-   * Redirects the user to the login page.
-   *
-   * @param {string} redirectUrl The URL the user should be redirected to after logging in.
-   */
-  redirectToLogin(redirectUrl = this.config.BASE_URL) {
-    global.location.assign(this.getLoginRedirectUrl(redirectUrl));
-  }
-
-  /**
-   * Builds a URL to the logout page with a post-logout redirect URL attached as a query parameter.
-   *
-   * ```
-   * const url = getLogoutRedirectUrl('http://localhost/mypage');
-   * console.log(url); // http://localhost/logout?next=http%3A%2F%2Flocalhost%2Fmypage
-   * ```
-   *
-   * @param {string} redirectUrl The URL the user should be redirected to after logging out.
-   */
-  getLogoutRedirectUrl(redirectUrl = this.config.BASE_URL) {
-    return `${this.config.LOGOUT_URL}?redirect_url=${encodeURIComponent(redirectUrl)}`;
-  }
-
-  /**
-   * Redirects the user to the logout page.
-   *
-   * @param {string} redirectUrl The URL the user should be redirected to after logging out.
-   */
-  redirectToLogout(redirectUrl = this.config.BASE_URL) {
-    global.location.assign(this.getLogoutRedirectUrl(redirectUrl));
-  }
-
-  /**
-   * If it exists, returns the user data representing the currently authenticated user. If the
-   * user is anonymous, returns null.
-   *
-   * @returns {UserData|null}
-   */
-  getAuthenticatedUser() {
-    return this.authenticatedUser;
-  }
-
-  /**
-   * Sets the authenticated user to the provided value.
-   *
-   * @param {UserData} authUser
-   */
-  setAuthenticatedUser(authUser) {
-    this.authenticatedUser = authUser;
   }
 
   /**

@@ -144,6 +144,7 @@ class SegmentAnalyticsService {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
+        mockApiId: eventName
       },
     ).catch((error) => {
       this.loggingService.logError(error);
